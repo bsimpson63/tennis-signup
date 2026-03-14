@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Tennis class signup script for wac.clubautomation.com.
-Targets the "by-class" calendar tab and registers for a named class.
+Uses the by-date calendar view to find open "Pro on Duty" slots and register.
 """
 
 import sys
@@ -10,61 +10,36 @@ import config
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 
 BASE_URL = "https://wac.clubautomation.com"
-CLASSES_URL = f"{BASE_URL}/calendar/classes"
 
 WEEKDAYS = {"monday", "tuesday", "wednesday", "thursday", "friday"}
-WEEKENDS = {"saturday", "sunday"}
 
-# Time patterns like "9:00 AM", "11:30 AM", "1:00 PM"
-TIME_RE = re.compile(r'(\d{1,2}:\d{2}\s*(AM|PM))', re.IGNORECASE)
+TIME_RE = re.compile(r'(\d{1,2}:\d{2})(am|pm)', re.IGNORECASE)
 
 
 def log(msg):
     print(f"[tennis-signup] {msg}")
 
 
-def is_before_noon(text):
-    """Return True if any time found in text is before 12:00 PM."""
-    for match in TIME_RE.finditer(text):
-        time_str = match.group(0).strip().upper()
-        if "AM" in time_str:
-            return True
-        if "PM" in time_str:
-            hour = int(time_str.split(":")[0])
-            if hour == 12:
-                return True  # 12:00 PM is noon — treat as not before noon
-            return False
-    # If no time found, fall back to checking for "AM"/"PM" in class title
-    title_upper = text.upper()
-    if " AM" in title_upper:
+def is_before_noon(time_str):
+    """Return True if a time string like '09:00am' or '11:30am' is before noon."""
+    m = TIME_RE.search(time_str)
+    if not m:
+        return True  # no time found, don't filter out
+    hour = int(m.group(1).split(":")[0])
+    period = m.group(2).lower()
+    if period == "am":
         return True
-    if " PM" in title_upper:
-        return False
-    return True  # no time info — don't filter out
-
-
-def is_weekday(text):
-    """Return True if the class title/text mentions a weekday."""
-    text_lower = text.lower()
-    for day in WEEKDAYS:
-        if day in text_lower:
-            return True
-    for day in WEEKENDS:
-        if day in text_lower:
-            return False
-    return True  # no day found — don't filter out
+    # PM: only 12:00pm counts as noon (not before noon)
+    return False
 
 
 def login(page):
-    log("Navigating to login page...")
+    log("Logging in...")
     page.goto(BASE_URL)
     page.wait_for_load_state("networkidle")
-
-    log("Filling credentials...")
     page.locator('input[name="login"]').fill(config.USERNAME)
     page.locator('input[name="password"]').fill(config.PASSWORD)
     page.locator('input[type="submit"], button[type="submit"]').first.click()
-
     try:
         page.wait_for_url("**/member**", timeout=config.TIMEOUT * 1000)
     except PlaywrightTimeoutError:
@@ -80,157 +55,82 @@ def login(page):
             pass
         sys.exit(1)
 
-    log(f"Logged in. Current URL: {page.url}")
+    log(f"Logged in. URL: {page.url}")
 
 
-def load_classes_page(page):
-    log("Navigating to Group Activities / Classes...")
+def load_by_date_view(page):
+    log("Navigating to Group Activities (by-date view)...")
+    page.locator("a:has-text('Group Activities')").first.click()
+    page.wait_for_load_state("networkidle")
 
-    nav_candidates = [
-        "a:has-text('Group Activities')",
-        "a:has-text('Classes')",
-        "a:has-text('Programs')",
-        "a:has-text('Calendar')",
-    ]
-
-    for sel in nav_candidates:
-        try:
-            links = page.locator(sel).all()
-            for link in links:
-                href = link.get_attribute("href") or ""
-                text = link.inner_text(timeout=1000).strip()
-                if any(kw in href.lower() or kw in text.lower()
-                       for kw in ["class", "group", "calendar", "activity"]):
-                    log(f"  Clicking: '{text}'")
-                    link.click()
-                    page.wait_for_load_state("networkidle")
-                    log(f"  Navigated to: {page.url}")
-
-                    # Click the "By Class" tab
-                    try:
-                        tab = page.locator(
-                            "#byClassTab, [data-tab='by-class'], "
-                            "a:has-text('By Class'), li:has-text('By Class')"
-                        ).first
-                        tab.wait_for(state="visible", timeout=5000)
-                        tab.click()
-                        page.wait_for_load_state("networkidle")
-                        log("  Switched to 'By Class' tab.")
-                    except PlaywrightTimeoutError:
-                        pass
-
-                    return
-        except PlaywrightTimeoutError:
-            continue
-
-    log("Could not find the classes nav link.")
-    sys.exit(1)
-
-
-def try_register_on_detail_page(page):
-    """
-    On the class detail page/modal, find and click an open register button.
-    Returns the button element if found, else None.
-    """
-    disabled = {"full", "not yet open", "closed", "cancel", "registered", "waitlist"}
-
-    for btn_sel in [
-        ".register_button",
-        ".register-button-now",
-        "a:has-text('Register')",
-        "button:has-text('Register')",
-        "input[value='Register']",
-    ]:
-        try:
-            for btn in page.locator(btn_sel).all():
-                if not btn.is_visible(timeout=500):
-                    continue
-                label = (btn.inner_text(timeout=500).strip()
-                         or btn.get_attribute("value") or "").lower()
-                if label in disabled:
-                    continue
-                return btn
-        except PlaywrightTimeoutError:
-            continue
-
-    return None
+    try:
+        tab = page.locator(
+            "#byDateTab, [data-tab='by-date'], a:has-text('By Date'), li:has-text('By Date')"
+        ).first
+        tab.wait_for(state="visible", timeout=5000)
+        tab.click()
+        page.wait_for_load_state("networkidle")
+        page.wait_for_timeout(1000)
+        log(f"Switched to By Date view. URL: {page.url}")
+    except PlaywrightTimeoutError:
+        log("By Date tab not found, may already be active.")
 
 
 def find_and_register(page):
-    log(f"Searching for '{config.CLASS_NAME}' classes"
+    log(f"Searching for open '{config.CLASS_NAME}' classes"
         + (" (weekdays only)" if config.WEEKDAYS_ONLY else "")
         + (" (before noon only)" if config.MORNING_ONLY else ""))
 
     try:
-        page.wait_for_selector(".row_link", timeout=config.TIMEOUT * 1000)
+        page.wait_for_selector("div.block", timeout=config.TIMEOUT * 1000)
     except PlaywrightTimeoutError:
-        log(f"No class rows found. Current URL: {page.url}")
+        log(f"No class entries found on page. URL: {page.url}")
         return False
 
-    row_links = page.locator(".row_link")
-    count = row_links.count()
-    log(f"Found {count} total class entries on page.")
+    # Each class entry is a div.block containing the title, time, and register button.
+    # Find blocks that have an open (non-closed) register button.
+    blocks = page.locator("div.block:has(.register_button:not(.register-button-closed))").all()
+    log(f"Found {len(blocks)} class(es) with open registration.")
 
-    classes_url = page.url  # remember so we can return after visiting detail pages
-
-    for i in range(count):
-        row_link = row_links.nth(i)
-        try:
-            title = row_link.inner_text(timeout=2000).strip()
-        except PlaywrightTimeoutError:
-            continue
+    for block in blocks:
+        container_text = block.inner_text(timeout=2000).strip()
 
         # Name filter
-        if config.CLASS_NAME.lower() not in title.lower():
+        if config.CLASS_NAME.lower() not in container_text.lower():
             continue
+
+        # Extract the class title line
+        title = ""
+        for line in container_text.splitlines():
+            line = line.strip()
+            if config.CLASS_NAME.lower() in line.lower():
+                title = line
+                break
 
         # Weekday filter
-        if config.WEEKDAYS_ONLY and not is_weekday(title):
-            log(f"  Skipping (weekend): {title}")
-            continue
+        if config.WEEKDAYS_ONLY:
+            if not any(day in container_text.lower() for day in WEEKDAYS):
+                log(f"  Skipping (weekend): {title}")
+                continue
 
         # Before-noon filter
-        if config.MORNING_ONLY and not is_before_noon(title):
-            log(f"  Skipping (afternoon): {title}")
-            continue
+        if config.MORNING_ONLY:
+            time_match = TIME_RE.search(container_text)
+            time_str = time_match.group(0) if time_match else ""
+            if not is_before_noon(time_str):
+                log(f"  Skipping (afternoon): {title}")
+                continue
 
-        log(f"  Candidate: '{title}'")
-
-        # Click into the class detail page/modal
-        try:
-            row_link.click(timeout=5000)
-            page.wait_for_load_state("networkidle")
-            page.wait_for_timeout(500)
-        except Exception as e:
-            log(f"  Could not open detail page: {e}")
-            continue
-
-        register_btn = try_register_on_detail_page(page)
-
-        if register_btn is None:
-            log("  No open register button (full / not yet open). Skipping.")
-            # Close modal or go back
-            try:
-                close = page.locator("button:has-text('close'), .modal-close, [aria-label='Close']").first
-                if close.is_visible(timeout=1000):
-                    close.click()
-                    page.wait_for_timeout(500)
-                else:
-                    page.go_back()
-                    page.wait_for_load_state("networkidle")
-            except Exception:
-                page.go_back()
-                page.wait_for_load_state("networkidle")
-            continue
-
-        btn_label = register_btn.inner_text().strip() or "Register"
+        btn = block.locator(".register_button:not(.register-button-closed)").first
+        btn_label = btn.inner_text(timeout=1000).strip() or "Sign Up"
+        log(f"  Found open class: '{title}' — button says '{btn_label}'")
 
         if config.DRY_RUN:
-            log(f"  DRY RUN: Would click '{btn_label}'. Set DRY_RUN = False in config.py to register.")
+            log("  DRY RUN: Would register. Set DRY_RUN = False in config.py to sign up.")
             return True
 
         log(f"  Clicking '{btn_label}'...")
-        register_btn.click()
+        btn.click()
         page.wait_for_load_state("networkidle")
 
         # Confirm any modal/dialog
@@ -243,10 +143,10 @@ def find_and_register(page):
             ".confirm-button",
         ]:
             try:
-                btn = page.locator(confirm_sel).first
-                if btn.is_visible(timeout=3000):
-                    log(f"  Confirming...")
-                    btn.click()
+                confirm = page.locator(confirm_sel).first
+                if confirm.is_visible(timeout=3000):
+                    log("  Confirming...")
+                    confirm.click()
                     page.wait_for_load_state("networkidle")
                     break
             except PlaywrightTimeoutError:
@@ -259,7 +159,7 @@ def find_and_register(page):
 
         return True
 
-    log("No eligible class found with an open registration slot.")
+    log("No open Pro on Duty AM weekday classes found today.")
     return False
 
 
@@ -271,7 +171,7 @@ def main():
 
         try:
             login(page)
-            load_classes_page(page)
+            load_by_date_view(page)
             find_and_register(page)
         except Exception as e:
             log(f"Error: {e}")
