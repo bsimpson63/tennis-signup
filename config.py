@@ -36,6 +36,9 @@ MORNING_ONLY = True
 # If True, finds and prints the class but does NOT register
 DRY_RUN = True
 
+# If True, runs through add-to-cart and captcha solving but skips payment submission
+CAPTCHA_TEST_ONLY = False
+
 # Page load timeout in seconds
 TIMEOUT = 30
 

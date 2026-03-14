@@ -76,16 +76,7 @@ def load_by_date_view(page):
 
 
 def add_to_cart(page, title):
-    """Click Sign Up, select member, add to cart. Returns True on success."""
-    log(f"  Clicking 'Sign Up'...")
-    page.wait_for_timeout(500)
-
-    # Click opens /calendar/event-sign-up-popup modal
-    page.evaluate("""() => {
-        const btn = document.querySelector('.register_button:not(.register-button-closed):not(.register-button-incart)');
-        if (btn) btn.click();
-    }""")
-
+    """Select member and add to cart (Sign Up button already clicked). Returns True on success."""
     # Wait for the popup members list
     try:
         page.wait_for_selector(".members-list", timeout=10000)
@@ -93,12 +84,15 @@ def add_to_cart(page, title):
         log("  Popup members list not found.")
         return False
 
-    # Select the first approved member
+    # Select the first approved member (click only if not already selected)
     selected = page.evaluate("""() => {
+        const getName = el => el.querySelector('span[id$="-name"]').textContent.trim();
+        const already = document.querySelector('.select-member.registered');
+        if (already) return getName(already);
         const member = document.querySelector('.select-member.approved');
         if (!member) return null;
         member.click();
-        return member.querySelector('span[id$="-name"]').textContent.trim();
+        return getName(member);
     }""")
     if not selected:
         log("  No approved member found in popup.")
@@ -146,7 +140,7 @@ def solve_turnstile():
     log("  Solving Cloudflare Turnstile via CapSolver...")
     capsolver.api_key = config.CAPSOLVER_API_KEY
     solution = capsolver.solve({
-        "type": "AntiCloudflareTask",
+        "type": "AntiTurnstileTaskProxyLess",
         "websiteURL": config.CF_TURNSTILE_URL,
         "websiteKey": config.CF_TURNSTILE_SITE_KEY,
     })
@@ -265,6 +259,11 @@ def find_and_register(page):
         if not turnstile_token:
             log("  Failed to get Turnstile token from CapSolver.")
             return False
+
+        if config.CAPTCHA_TEST_ONLY:
+            log("  CAPTCHA_TEST_ONLY: Turnstile solved successfully. Skipping payment submission.")
+            log("  Clear your cart at /member/cart before running again.")
+            return True
 
         # Step 4: submit payment directly via requests
         response = submit_payment(page, cart_item_id, turnstile_token)
