@@ -46,12 +46,12 @@ With `DRY_RUN = True` the script will log which class it would register for with
 
 ## Running automatically with launchd (macOS)
 
-The included plist schedules the script to run daily at 12:01 AM.
+`setup.sh` generates a `com.tennis-signup.plist` file with the correct paths for your machine. Run it first if you haven't already.
 
 **Install:**
 ```bash
-cp com.bsimpson.tennis-signup.plist ~/Library/LaunchAgents/
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.bsimpson.tennis-signup.plist
+cp com.tennis-signup.plist ~/Library/LaunchAgents/
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.tennis-signup.plist
 ```
 
 **Verify it's loaded:**
@@ -61,13 +61,13 @@ launchctl list | grep tennis
 
 **Check logs:**
 ```bash
-tail -f /Users/bsimpson/projects/tennis-signup/signup.log
+tail -f signup.log
 ```
 
 **Uninstall:**
 ```bash
-launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.bsimpson.tennis-signup.plist
-rm ~/Library/LaunchAgents/com.bsimpson.tennis-signup.plist
+launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.tennis-signup.plist
+rm ~/Library/LaunchAgents/com.tennis-signup.plist
 ```
 
 **Notes:**
@@ -75,6 +75,6 @@ rm ~/Library/LaunchAgents/com.bsimpson.tennis-signup.plist
 - Logs are written to `signup.log` in the project directory.
 - To change the run time, edit the `StartCalendarInterval` block in the plist, then reload:
   ```bash
-  launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.bsimpson.tennis-signup.plist
-  launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.bsimpson.tennis-signup.plist
+  launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.tennis-signup.plist
+  launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.tennis-signup.plist
   ```
