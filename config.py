@@ -12,12 +12,20 @@ if _env.exists():
 
 USERNAME = os.environ.get("WAC_USERNAME", "")
 PASSWORD = os.environ.get("WAC_PASSWORD", "")
+CAPSOLVER_API_KEY = os.environ.get("CAPSOLVER_API_KEY", "")
+MEMBER_USER_ID = os.environ.get("MEMBER_USER_ID", "")
+PAYMENT_ACCOUNT = os.environ.get("PAYMENT_ACCOUNT", "")
+BILL_STREET_ADDRESS = os.environ.get("BILL_STREET_ADDRESS", "")
+BILL_CITY = os.environ.get("BILL_CITY", "")
+BILL_STATE = os.environ.get("BILL_STATE", "")
 
 if not USERNAME or not PASSWORD:
     raise RuntimeError("WAC_USERNAME and WAC_PASSWORD must be set in .env or the environment.")
+if not CAPSOLVER_API_KEY:
+    raise RuntimeError("CAPSOLVER_API_KEY must be set in .env or the environment.")
 
 # Class to sign up for (case-insensitive, partial match on class title)
-CLASS_NAME = "Pro on duty"
+CLASS_NAME = "Pro on duty advanced"
 
 # Only register for weekday classes (Mon-Fri). Set to False to include weekends.
 WEEKDAYS_ONLY = True
@@ -30,3 +38,7 @@ DRY_RUN = True
 
 # Page load timeout in seconds
 TIMEOUT = 30
+
+# Cloudflare Turnstile site key for wac.clubautomation.com cart checkout (do not change)
+CF_TURNSTILE_SITE_KEY = "0x4AAAAAAA_si1yPhVGYVyBi"
+CF_TURNSTILE_URL = "https://wac.clubautomation.com/member/cart"

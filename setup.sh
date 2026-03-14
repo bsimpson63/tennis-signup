@@ -1,8 +1,8 @@
 #!/bin/bash
 set -e
 
-echo "Installing Playwright..."
-pip3 install playwright
+echo "Installing dependencies..."
+pip3 install playwright capsolver requests
 
 echo "Installing Chromium browser..."
 playwright install chromium
