@@ -24,8 +24,8 @@ if not USERNAME or not PASSWORD:
 if not CAPSOLVER_API_KEY:
     raise RuntimeError("CAPSOLVER_API_KEY must be set in .env or the environment.")
 
-# Class to sign up for (case-insensitive, partial match on class title)
-CLASS_NAME = "Pro on duty advanced"
+# Classes to sign up for (case-insensitive, partial match on class title)
+CLASS_NAMES = ["Pro on duty advanced", "Stroke of the Week Wednesday AM"]
 
 # Only register for weekday classes (Mon-Fri). Set to False to include weekends.
 WEEKDAYS_ONLY = True

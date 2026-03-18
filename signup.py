@@ -193,7 +193,7 @@ def submit_payment(page, cart_item_id, turnstile_token):
 
 
 def find_and_register(page):
-    log(f"Searching for open '{config.CLASS_NAME}' classes"
+    log(f"Searching for open classes: {config.CLASS_NAMES}"
         + (" (weekdays only)" if config.WEEKDAYS_ONLY else "")
         + (" (before noon only)" if config.MORNING_ONLY else ""))
 
@@ -206,16 +206,22 @@ def find_and_register(page):
     blocks = page.locator("div.block:has(.register_button:not(.register-button-closed))").all()
     log(f"Found {len(blocks)} class(es) with open registration.")
 
+    registered_any = False
+
     for block in blocks:
         container_text = block.inner_text(timeout=2000).strip()
 
-        if config.CLASS_NAME.lower() not in container_text.lower():
+        matched_name = next(
+            (name for name in config.CLASS_NAMES if name.lower() in container_text.lower()),
+            None
+        )
+        if not matched_name:
             continue
 
         title = ""
         for line in container_text.splitlines():
             line = line.strip()
-            if config.CLASS_NAME.lower() in line.lower():
+            if matched_name.lower() in line.lower():
                 title = line
                 break
 
@@ -276,7 +282,7 @@ def find_and_register(page):
 
         return True
 
-    log(f"No open '{config.CLASS_NAME}' classes found today.")
+    log(f"No open classes found today.")
     return False
 
 
