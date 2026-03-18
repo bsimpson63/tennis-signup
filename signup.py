@@ -7,6 +7,7 @@ Checkout is completed via direct API call with a CapSolver-generated Turnstile t
 
 import sys
 import re
+import datetime
 import requests
 import capsolver
 import config
@@ -280,6 +281,7 @@ def find_and_register(page):
 
 
 def main():
+    log(datetime.datetime.now().strftime("Starting at %Y-%m-%d %H:%M:%S"))
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=False)
         page = browser.new_page()
