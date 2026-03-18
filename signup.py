@@ -283,7 +283,7 @@ def find_and_register(page):
 def main():
     log(datetime.datetime.now().strftime("Starting at %Y-%m-%d %H:%M:%S"))
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
+        browser = p.chromium.launch(headless=True)
         page = browser.new_page()
         page.set_default_timeout(config.TIMEOUT * 1000)
 
