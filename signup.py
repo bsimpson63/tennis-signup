@@ -8,10 +8,15 @@ Checkout is completed via direct API call with a CapSolver-generated Turnstile t
 import sys
 import re
 import datetime
+import time
 import requests
 import capsolver
 import config
-from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
 BASE_URL = "https://wac.clubautomation.com"
 
@@ -20,7 +25,7 @@ TIME_RE = re.compile(r'(\d{1,2}:\d{2})(am|pm)', re.IGNORECASE)
 
 
 def log(msg):
-    print(f"[tennis-signup] {msg}")
+    print(f"[tennis-signup] {msg}", flush=True)
 
 
 def is_before_noon(time_str):
@@ -33,60 +38,77 @@ def is_before_noon(time_str):
     return False
 
 
-def login(page):
-    log("Logging in...")
-    page.goto(BASE_URL)
-    page.wait_for_load_state("networkidle")
-    page.locator('input[name="login"]').fill(config.USERNAME)
-    page.locator('input[name="password"]').fill(config.PASSWORD)
-    page.locator('input[type="submit"], button[type="submit"]').first.click()
-    try:
-        page.wait_for_url("**/member**", timeout=config.TIMEOUT * 1000)
-    except PlaywrightTimeoutError:
-        pass
-    page.wait_for_load_state("networkidle")
-    page.wait_for_timeout(2000)
+def wait_for_page_load(driver):
+    WebDriverWait(driver, config.TIMEOUT).until(
+        lambda d: d.execute_script("return document.readyState") == "complete"
+    )
+    time.sleep(1)
 
-    if page.locator(".error, .alert-danger").count() > 0:
-        try:
-            err = page.locator(".error, .alert-danger").first.inner_text(timeout=2000)
-            log(f"Login failed: {err}")
-        except PlaywrightTimeoutError:
-            pass
+
+def make_driver():
+    options = webdriver.ChromeOptions()
+    options.add_argument("--headless")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    if config.CHROMIUM_PATH:
+        options.binary_location = config.CHROMIUM_PATH
+    if config.CHROMEDRIVER_PATH:
+        from selenium.webdriver.chrome.service import Service
+        return webdriver.Chrome(service=Service(config.CHROMEDRIVER_PATH), options=options)
+    return webdriver.Chrome(options=options)
+
+
+def login(driver):
+    log("Logging in...")
+    driver.get(BASE_URL)
+    wait_for_page_load(driver)
+    driver.find_element(By.NAME, "login").send_keys(config.USERNAME)
+    driver.find_element(By.NAME, "password").send_keys(config.PASSWORD)
+    driver.find_element(By.CSS_SELECTOR, 'input[type="submit"], button[type="submit"]').click()
+    try:
+        WebDriverWait(driver, config.TIMEOUT).until(lambda d: "/member" in d.current_url)
+    except TimeoutException:
+        pass
+    wait_for_page_load(driver)
+    time.sleep(2)
+
+    errors = driver.find_elements(By.CSS_SELECTOR, ".error, .alert-danger")
+    if errors:
+        log(f"Login failed: {errors[0].text}")
         sys.exit(1)
 
-    log(f"Logged in. URL: {page.url}")
+    log(f"Logged in. URL: {driver.current_url}")
 
 
-def load_by_date_view(page):
+def load_by_date_view(driver):
     log("Navigating to Group Activities (by-date view)...")
-    page.locator("a:has-text('Group Activities')").first.click()
-    page.wait_for_load_state("networkidle")
+    driver.find_element(By.XPATH, "//a[contains(text(), 'Group Activities')]").click()
+    wait_for_page_load(driver)
 
     try:
-        tab = page.locator(
-            "#byDateTab, [data-tab='by-date'], a:has-text('By Date'), li:has-text('By Date')"
-        ).first
-        tab.wait_for(state="visible", timeout=5000)
+        tab = WebDriverWait(driver, 5).until(
+            EC.visibility_of_element_located((By.CSS_SELECTOR,
+                "#byDateTab, [data-tab='by-date'], a[href*='by-date']"))
+        )
         tab.click()
-        page.wait_for_load_state("networkidle")
-        page.wait_for_timeout(1000)
-        log(f"Switched to By Date view. URL: {page.url}")
-    except PlaywrightTimeoutError:
+        wait_for_page_load(driver)
+        time.sleep(1)
+        log(f"Switched to By Date view. URL: {driver.current_url}")
+    except TimeoutException:
         log("By Date tab not found, may already be active.")
 
 
-def add_to_cart(page, title):
+def add_to_cart(driver, title):
     """Select member and add to cart (Sign Up button already clicked). Returns True on success."""
-    # Wait for the popup members list
     try:
-        page.wait_for_selector(".members-list", timeout=10000)
-    except PlaywrightTimeoutError:
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, ".members-list"))
+        )
+    except TimeoutException:
         log("  Popup members list not found.")
         return False
 
-    # Select the first approved member (click only if not already selected)
-    selected = page.evaluate("""() => {
+    selected = driver.execute_script("""
         const getName = el => el.querySelector('span[id$="-name"]').textContent.trim();
         const already = document.querySelector('.select-member.registered');
         if (already) return getName(already);
@@ -94,39 +116,36 @@ def add_to_cart(page, title):
         if (!member) return null;
         member.click();
         return getName(member);
-    }""")
+    """)
     if not selected:
         log("  No approved member found in popup.")
         return False
     log(f"  Selected member: {selected}")
-    page.wait_for_timeout(500)
+    time.sleep(0.5)
 
-    # Click Add to Cart
-    page.evaluate("document.querySelector('#add-to-cart').click()")
+    driver.execute_script("document.querySelector('#add-to-cart').click()")
 
-    # Wait for cart count to increment
     try:
-        page.wait_for_function(
-            "() => !document.querySelector('.view_cart_text').innerText.includes('(0)')",
-            timeout=8000
-        )
-    except PlaywrightTimeoutError:
+        WebDriverWait(driver, 8).until(lambda d: d.execute_script(
+            "const el = document.querySelector('.view_cart_text'); "
+            "return el && !el.innerText.includes('(0)');"
+        ))
+    except TimeoutException:
         log("  Cart did not update after clicking Add to Cart.")
         return False
 
-    cart_text = page.locator(".view_cart_text").inner_text(timeout=2000)
+    cart_text = driver.find_element(By.CSS_SELECTOR, ".view_cart_text").text
     log(f"  Cart updated: '{cart_text}'")
     return True
 
 
-def get_cart_item_id(page):
+def get_cart_item_id(driver):
     """Navigate to cart page and extract the cart item ID from the page HTML."""
-    page.goto(f"{BASE_URL}/member/cart")
-    page.wait_for_load_state("networkidle")
-    page.wait_for_timeout(1000)
+    driver.get(f"{BASE_URL}/member/cart")
+    wait_for_page_load(driver)
+    time.sleep(1)
 
-    html = page.content()
-    match = re.search(r'/cart_items/(\d+)/', html)
+    match = re.search(r'/cart_items/(\d+)/', driver.page_source)
     if match:
         cart_item_id = match.group(1)
         log(f"  Cart item ID: {cart_item_id}")
@@ -153,10 +172,9 @@ def solve_turnstile():
     return token
 
 
-def submit_payment(page, cart_item_id, turnstile_token):
-    """POST the payment directly using the session cookies from Playwright."""
-    # Extract session cookies
-    cookies = {c["name"]: c["value"] for c in page.context.cookies()}
+def submit_payment(driver, cart_item_id, turnstile_token):
+    """POST the payment directly using the session cookies from the browser."""
+    cookies = {c["name"]: c["value"] for c in driver.get_cookies()}
 
     url = (f"{BASE_URL}/member/cart/step/1/cart_items/{cart_item_id}/"
            f"?ajax=1&ajax=true")
@@ -192,24 +210,28 @@ def submit_payment(page, cart_item_id, turnstile_token):
     return response
 
 
-def find_and_register(page):
+def find_and_register(driver):
     log(f"Searching for open classes: {config.CLASS_NAMES}"
         + (" (weekdays only)" if config.WEEKDAYS_ONLY else "")
         + (" (before noon only)" if config.MORNING_ONLY else ""))
 
     try:
-        page.wait_for_selector("div.block", timeout=config.TIMEOUT * 1000)
-    except PlaywrightTimeoutError:
-        log(f"No class entries found on page. URL: {page.url}")
+        WebDriverWait(driver, config.TIMEOUT).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "div.block"))
+        )
+    except TimeoutException:
+        log(f"No class entries found on page. URL: {driver.current_url}")
         return False
 
-    blocks = page.locator("div.block:has(.register_button:not(.register-button-closed))").all()
-    log(f"Found {len(blocks)} class(es) with open registration.")
+    all_blocks = driver.find_elements(By.CSS_SELECTOR, "div.block")
+    open_blocks = [
+        b for b in all_blocks
+        if b.find_elements(By.CSS_SELECTOR, ".register_button:not(.register-button-closed)")
+    ]
+    log(f"Found {len(open_blocks)} class(es) with open registration.")
 
-    registered_any = False
-
-    for block in blocks:
-        container_text = block.inner_text(timeout=2000).strip()
+    for block in open_blocks:
+        container_text = block.text.strip()
 
         matched_name = next(
             (name for name in config.CLASS_NAMES if name.lower() in container_text.lower()),
@@ -237,8 +259,8 @@ def find_and_register(page):
                 log(f"  Skipping (afternoon): {title}")
                 continue
 
-        btn = block.locator(".register_button:not(.register-button-closed)").first
-        btn_label = btn.inner_text(timeout=1000).strip() or "Sign Up"
+        btn = block.find_element(By.CSS_SELECTOR, ".register_button:not(.register-button-closed)")
+        btn_label = btn.text.strip() or "Sign Up"
 
         if "in cart" in btn_label.lower():
             log(f"  Skipping '{title}' — already in cart. Clear your cart at /member/cart first.")
@@ -251,13 +273,13 @@ def find_and_register(page):
             return True
 
         # Step 1: add to cart via popup
-        btn.scroll_into_view_if_needed()
-        btn.click()
-        if not add_to_cart(page, title):
+        driver.execute_script("arguments[0].scrollIntoView()", btn)
+        driver.execute_script("arguments[0].click()", btn)
+        if not add_to_cart(driver, title):
             continue
 
         # Step 2: get cart item ID
-        cart_item_id = get_cart_item_id(page)
+        cart_item_id = get_cart_item_id(driver)
         if not cart_item_id:
             continue
 
@@ -273,7 +295,7 @@ def find_and_register(page):
             return True
 
         # Step 4: submit payment directly via requests
-        response = submit_payment(page, cart_item_id, turnstile_token)
+        response = submit_payment(driver, cart_item_id, turnstile_token)
 
         if response.status_code == 200:
             log(f"Successfully registered for '{title}'!")
@@ -288,20 +310,18 @@ def find_and_register(page):
 
 def main():
     log(datetime.datetime.now().strftime("Starting at %Y-%m-%d %H:%M:%S"))
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
-        page.set_default_timeout(config.TIMEOUT * 1000)
+    driver = make_driver()
+    driver.implicitly_wait(config.TIMEOUT)
 
-        try:
-            login(page)
-            load_by_date_view(page)
-            find_and_register(page)
-        except Exception as e:
-            log(f"Error: {e}")
-            raise
-        finally:
-            browser.close()
+    try:
+        login(driver)
+        load_by_date_view(driver)
+        find_and_register(driver)
+    except Exception as e:
+        log(f"Error: {e}")
+        raise
+    finally:
+        driver.quit()
 
 
 if __name__ == "__main__":

@@ -19,6 +19,11 @@ BILL_STREET_ADDRESS = os.environ.get("BILL_STREET_ADDRESS", "")
 BILL_CITY = os.environ.get("BILL_CITY", "")
 BILL_STATE = os.environ.get("BILL_STATE", "")
 
+# Optional: set these to use a specific Chromium/ChromeDriver (e.g. on Raspberry Pi)
+# Leave empty to let Selenium auto-detect (works on Mac with Chrome installed)
+CHROMIUM_PATH = os.environ.get("CHROMIUM_PATH", "")
+CHROMEDRIVER_PATH = os.environ.get("CHROMEDRIVER_PATH", "")
+
 if not USERNAME or not PASSWORD:
     raise RuntimeError("WAC_USERNAME and WAC_PASSWORD must be set in .env or the environment.")
 if not CAPSOLVER_API_KEY:

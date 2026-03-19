@@ -2,10 +2,7 @@
 set -e
 
 echo "Installing dependencies..."
-pip3 install playwright capsolver requests
-
-echo "Installing Chromium browser..."
-playwright install chromium
+pip3 install selenium capsolver requests
 
 echo "Generating launchd plist..."
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
