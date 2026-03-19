@@ -2,7 +2,7 @@
 set -e
 
 echo "Installing dependencies..."
-pip3 install selenium capsolver requests
+pip3 install selenium capsolver requests flask
 
 echo "Generating launchd plist..."
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"

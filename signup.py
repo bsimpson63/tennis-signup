@@ -6,7 +6,7 @@ Checkout is completed via direct API call with a CapSolver-generated Turnstile t
 """
 
 import sys
-import re
+import re  # used in get_cart_item_id
 import datetime
 import time
 import requests
@@ -20,22 +20,8 @@ from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
 BASE_URL = "https://wac.clubautomation.com"
 
-WEEKDAYS = {"monday", "tuesday", "wednesday", "thursday", "friday"}
-TIME_RE = re.compile(r'(\d{1,2}:\d{2})(am|pm)', re.IGNORECASE)
-
-
 def log(msg):
     print(f"[tennis-signup] {msg}", flush=True)
-
-
-def is_before_noon(time_str):
-    m = TIME_RE.search(time_str)
-    if not m:
-        return True
-    period = m.group(2).lower()
-    if period == "am":
-        return True
-    return False
 
 
 def wait_for_page_load(driver):
@@ -211,9 +197,15 @@ def submit_payment(driver, cart_item_id, turnstile_token):
 
 
 def find_and_register(driver):
-    log(f"Searching for open classes: {config.CLASS_NAMES}"
-        + (" (weekdays only)" if config.WEEKDAYS_ONLY else "")
-        + (" (before noon only)" if config.MORNING_ONLY else ""))
+    today = datetime.datetime.now().strftime("%A").lower()  # e.g. "monday"
+    today_schedules = [s for s in config.SCHEDULES if s.get("day") == today]
+
+    if not today_schedules:
+        log(f"No classes scheduled for {today.capitalize()}.")
+        return False
+
+    log(f"Searching for classes on {today.capitalize()}: "
+        + ", ".join(s["class_name"] for s in today_schedules))
 
     try:
         WebDriverWait(driver, config.TIMEOUT).until(
@@ -233,31 +225,19 @@ def find_and_register(driver):
     for block in open_blocks:
         container_text = block.text.strip()
 
-        matched_name = next(
-            (name for name in config.CLASS_NAMES if name.lower() in container_text.lower()),
+        matched_schedule = next(
+            (s for s in today_schedules if s["class_name"].lower() in container_text.lower()),
             None
         )
-        if not matched_name:
+        if not matched_schedule:
             continue
 
         title = ""
         for line in container_text.splitlines():
             line = line.strip()
-            if matched_name.lower() in line.lower():
+            if matched_schedule["class_name"].lower() in line.lower():
                 title = line
                 break
-
-        if config.WEEKDAYS_ONLY:
-            if not any(day in container_text.lower() for day in WEEKDAYS):
-                log(f"  Skipping (weekend): {title}")
-                continue
-
-        if config.MORNING_ONLY:
-            time_match = TIME_RE.search(container_text)
-            time_str = time_match.group(0) if time_match else ""
-            if not is_before_noon(time_str):
-                log(f"  Skipping (afternoon): {title}")
-                continue
 
         btn = block.find_element(By.CSS_SELECTOR, ".register_button:not(.register-button-closed)")
         btn_label = btn.text.strip() or "Sign Up"
@@ -269,7 +249,7 @@ def find_and_register(driver):
         log(f"  Found open class: '{title}'")
 
         if config.DRY_RUN:
-            log("  DRY RUN: Would register. Set DRY_RUN = False in config.py to sign up.")
+            log("  DRY RUN: Would register. Disable dry run via the web UI to sign up.")
             return True
 
         # Step 1: add to cart via popup
@@ -304,7 +284,7 @@ def find_and_register(driver):
 
         return True
 
-    log(f"No open classes found today.")
+    log(f"No open classes found for {today.capitalize()}.")
     return False
 
 
