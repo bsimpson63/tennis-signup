@@ -54,6 +54,7 @@ TEMPLATE = """<!doctype html>
 <body>
   <main>
     <h1>Tennis Signup</h1>
+    <p><a href="https://wac.clubautomation.com/calendar/classes?tab=by-date" target="_blank">View class calendar</a></p>
 
     <section>
       <h2>Schedule</h2>
@@ -96,7 +97,7 @@ TEMPLATE = """<!doctype html>
               <input type="text" name="class_name" placeholder="e.g. Pro On Duty Advanced Monday AM" required>
             </label>
           </div>
-          <small>Enter the name as it appears on the website. Partial, case-insensitive match is used.</small>
+          <small>Enter the name as it appears on the <a href="https://wac.clubautomation.com/calendar/classes?tab=by-date" target="_blank">website</a>. Partial, case-insensitive match is used.</small>
           <br>
           <button type="submit" style="margin-top:0.75rem">Add</button>
         </form>
