@@ -1,6 +1,6 @@
 # tennis-signup
 
-Automates signing up for "Pro on Duty Advanced" tennis classes on [wac.clubautomation.com](https://wac.clubautomation.com).
+Automates signing up for tennis classes on [wac.clubautomation.com](https://wac.clubautomation.com).
 
 ## Setup
 
@@ -19,11 +19,12 @@ Edit `.env` and fill in all required values:
 - `MEMBER_USER_ID` — your numeric member ID (find in Chrome DevTools when submitting payment)
 - `PAYMENT_ACCOUNT` — your saved payment method identifier (e.g. `user-credit-card_XXXXX`)
 - `BILL_STREET_ADDRESS`, `BILL_CITY`, `BILL_STATE` — billing address
+- `CHROMIUM_PATH` / `CHROMEDRIVER_PATH` — optional; set these on Raspberry Pi (e.g. `/usr/bin/chromium`, `/usr/bin/chromedriver`). Leave unset on Mac to use selenium-manager auto-detection.
 
 **3. Configure preferences**
 
 Edit `config.py` to adjust:
-- `CLASS_NAME` — class to search for (default: `"Pro on duty advanced"`)
+- `CLASS_NAMES` — list of classes to search for (registers for the first available match)
 - `WEEKDAYS_ONLY` — skip weekend classes (default: `True`)
 - `MORNING_ONLY` — skip afternoon classes (default: `True`)
 - `DRY_RUN` — if `True`, finds a class but does not register (default: `False`)
@@ -38,13 +39,25 @@ With `DRY_RUN = True` the script will log which class it would register for with
 
 ## How it works
 
-1. Logs in via Playwright (Chromium)
+1. Logs in via Selenium (Chromium, headless)
 2. Navigates to the by-date calendar view and finds the soonest open matching class
 3. Clicks Sign Up, selects the member, and adds to cart
 4. Calls CapSolver to solve the Cloudflare Turnstile challenge on the cart page
 5. POSTs directly to the payment API using the session cookies + Turnstile token
 
-## Running automatically with launchd (macOS)
+## Running automatically
+
+### Raspberry Pi (recommended) — cron
+
+```bash
+crontab -e
+```
+Add:
+```
+1 0 * * * cd /home/pi/tennis-signup && /home/pi/tennis-signup/venv/bin/python3 signup.py >> /home/pi/tennis-signup/signup.log 2>&1
+```
+
+### macOS — launchd
 
 `setup.sh` generates a `com.tennis-signup.plist` file with the correct paths for your machine. Run it first if you haven't already.
 
@@ -52,16 +65,6 @@ With `DRY_RUN = True` the script will log which class it would register for with
 ```bash
 cp com.tennis-signup.plist ~/Library/LaunchAgents/
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.tennis-signup.plist
-```
-
-**Verify it's loaded:**
-```bash
-launchctl list | grep tennis
-```
-
-**Check logs:**
-```bash
-tail -f signup.log
 ```
 
 **Uninstall:**
@@ -72,9 +75,10 @@ rm ~/Library/LaunchAgents/com.tennis-signup.plist
 
 **Notes:**
 - The Mac must be awake at 12:01 AM. If it's asleep, launchd will run the job the next time it wakes.
-- Logs are written to `signup.log` in the project directory.
-- To change the run time, edit the `StartCalendarInterval` block in the plist, then reload:
-  ```bash
-  launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.tennis-signup.plist
-  launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.tennis-signup.plist
-  ```
+- To change the run time, edit the `StartCalendarInterval` block in the plist, then reload it.
+
+## Checking logs
+
+```bash
+tail -f signup.log
+```
