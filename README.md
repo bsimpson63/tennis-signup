@@ -21,29 +21,52 @@ Edit `.env` and fill in all required values:
 - `BILL_STREET_ADDRESS`, `BILL_CITY`, `BILL_STATE` — billing address
 - `CHROMIUM_PATH` / `CHROMEDRIVER_PATH` — optional; set these on Raspberry Pi (e.g. `/usr/bin/chromium`, `/usr/bin/chromedriver`). Leave unset on Mac to use selenium-manager auto-detection.
 
-**3. Configure preferences**
+**3. Configure your schedule**
 
-Edit `config.py` to adjust:
-- `CLASS_NAMES` — list of classes to search for (registers for the first available match)
-- `WEEKDAYS_ONLY` — skip weekend classes (default: `True`)
-- `MORNING_ONLY` — skip afternoon classes (default: `True`)
-- `DRY_RUN` — if `True`, finds a class but does not register (default: `False`)
-- `CAPTCHA_TEST_ONLY` — if `True`, runs through add-to-cart and captcha solving but skips payment submission (default: `False`)
+Start the web UI and add classes via the browser (see below), or manually create `settings.json`:
+```json
+{
+  "schedules": [
+    {"class_name": "Pro On Duty Advanced Monday AM", "day": "monday"},
+    {"class_name": "Stroke of the Week Wednesday AM", "day": "wednesday"}
+  ],
+  "dry_run": false
+}
+```
+Class names are case-insensitive partial matches against what appears on the [class calendar](https://wac.clubautomation.com/calendar/classes?tab=by-date).
 
 **4. Test it**
 ```bash
 python3 signup.py
 ```
 
-With `DRY_RUN = True` the script will log which class it would register for without actually signing you up.
-
 ## How it works
 
-1. Logs in via Selenium (Chromium, headless)
-2. Navigates to the by-date calendar view and finds the soonest open matching class
-3. Clicks Sign Up, selects the member, and adds to cart
-4. Calls CapSolver to solve the Cloudflare Turnstile challenge on the cart page
-5. POSTs directly to the payment API using the session cookies + Turnstile token
+1. Runs nightly at 12:01 AM
+2. Checks today's day of week against the configured schedule
+3. Logs in via Selenium (Chromium, headless) and navigates to the by-date calendar view
+4. Finds the first open class matching today's scheduled class name
+5. Clicks Sign Up, selects the member, and adds to cart
+6. Calls CapSolver to solve the Cloudflare Turnstile challenge on the cart page
+7. POSTs directly to the payment API using the session cookies + Turnstile token
+
+## Web UI
+
+A Flask web app lets you manage the schedule and view logs from any browser on your local network.
+
+**Start manually:**
+```bash
+python3 webapp.py
+```
+
+**Access at:** `http://raspberrypi.local:5000` (or the Pi's IP address)
+
+The web UI lets you:
+- Add and remove (class name, day) schedule entries
+- Toggle dry run mode
+- View recent log output
+
+The web app starts automatically on boot via cron (`@reboot`).
 
 ## Running automatically
 
@@ -55,6 +78,7 @@ crontab -e
 Add:
 ```
 1 0 * * * cd /home/pi/tennis-signup && /home/pi/tennis-signup/venv/bin/python3 signup.py >> /home/pi/tennis-signup/signup.log 2>&1
+@reboot cd /home/pi/tennis-signup && /home/pi/tennis-signup/venv/bin/python3 webapp.py >> /home/pi/tennis-signup/webapp.log 2>&1
 ```
 
 ### macOS — launchd
@@ -72,10 +96,6 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.tennis-signup.plist
 launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.tennis-signup.plist
 rm ~/Library/LaunchAgents/com.tennis-signup.plist
 ```
-
-**Notes:**
-- The Mac must be awake at 12:01 AM. If it's asleep, launchd will run the job the next time it wakes.
-- To change the run time, edit the `StartCalendarInterval` block in the plist, then reload it.
 
 ## Checking logs
 
