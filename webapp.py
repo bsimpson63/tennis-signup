@@ -14,8 +14,6 @@ app = Flask(__name__)
 SETTINGS_PATH = pathlib.Path(__file__).parent / "settings.json"
 LOG_PATH = pathlib.Path(__file__).parent / "signup.log"
 
-DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
-
 
 def load_settings():
     if SETTINGS_PATH.exists():
@@ -23,7 +21,7 @@ def load_settings():
             return json.loads(SETTINGS_PATH.read_text())
         except Exception:
             pass
-    return {"schedules": [], "dry_run": False}
+    return {"class_names": [], "dry_run": False}
 
 
 def save_settings(settings):
@@ -57,19 +55,18 @@ TEMPLATE = """<!doctype html>
     <p><a href="https://wac.clubautomation.com/calendar/classes?tab=by-date" target="_blank">View class calendar</a></p>
 
     <section>
-      <h2>Schedule</h2>
-      <p>On each scheduled day the script will find and register for the first open class whose name contains the configured string (case-insensitive).</p>
-      {% if schedules %}
+      <h2>Classes</h2>
+      <p>Each night the script registers for the first open class whose name contains one of the strings below (case-insensitive).</p>
+      {% if class_names %}
       <figure>
         <table>
-          <thead><tr><th>Day</th><th>Class name</th><th></th></tr></thead>
+          <thead><tr><th>Class name</th><th></th></tr></thead>
           <tbody>
-            {% for i, s in enumerate(schedules) %}
+            {% for i, name in enumerate(class_names) %}
             <tr>
-              <td>{{ s.day.capitalize() }}</td>
-              <td>{{ s.class_name }}</td>
+              <td>{{ name }}</td>
               <td>
-                <form class="remove-form" method="post" action="/schedule/delete/{{ i }}">
+                <form class="remove-form" method="post" action="/class/delete/{{ i }}">
                   <button class="remove-btn secondary outline" type="submit">Remove</button>
                 </form>
               </td>
@@ -79,24 +76,15 @@ TEMPLATE = """<!doctype html>
         </table>
       </figure>
       {% else %}
-      <p><em>No classes scheduled yet.</em></p>
+      <p><em>No classes configured yet.</em></p>
       {% endif %}
 
       <details>
         <summary role="button" class="outline">Add class</summary>
-        <form method="post" action="/schedule/add" style="margin-top:1rem">
-          <div class="grid">
-            <label>Day
-              <select name="day" required>
-                {% for day in days %}
-                <option value="{{ day }}">{{ day.capitalize() }}</option>
-                {% endfor %}
-              </select>
-            </label>
-            <label>Class name
-              <input type="text" name="class_name" placeholder="e.g. Pro On Duty Advanced Monday AM" required>
-            </label>
-          </div>
+        <form method="post" action="/class/add" style="margin-top:1rem">
+          <label>Class name
+            <input type="text" name="class_name" placeholder="e.g. Pro On Duty Advanced Monday AM" required>
+          </label>
           <small>Enter the name as it appears on the <a href="https://wac.clubautomation.com/calendar/classes?tab=by-date" target="_blank">website</a>. Partial, case-insensitive match is used.</small>
           <br>
           <button type="submit" style="margin-top:0.75rem">Add</button>
@@ -131,32 +119,30 @@ def index():
     settings = load_settings()
     return render_template_string(
         TEMPLATE,
-        schedules=settings.get("schedules", []),
+        class_names=settings.get("class_names", []),
         dry_run=settings.get("dry_run", False),
         log=read_log(),
-        days=DAYS,
         enumerate=enumerate,
     )
 
 
-@app.route("/schedule/add", methods=["POST"])
-def schedule_add():
+@app.route("/class/add", methods=["POST"])
+def class_add():
     settings = load_settings()
     class_name = request.form.get("class_name", "").strip()
-    day = request.form.get("day", "").strip().lower()
-    if class_name and day in DAYS:
-        settings.setdefault("schedules", []).append({"class_name": class_name, "day": day})
+    if class_name:
+        settings.setdefault("class_names", []).append(class_name)
         save_settings(settings)
     return redirect(url_for("index"))
 
 
-@app.route("/schedule/delete/<int:idx>", methods=["POST"])
-def schedule_delete(idx):
+@app.route("/class/delete/<int:idx>", methods=["POST"])
+def class_delete(idx):
     settings = load_settings()
-    schedules = settings.get("schedules", [])
-    if 0 <= idx < len(schedules):
-        schedules.pop(idx)
-        settings["schedules"] = schedules
+    class_names = settings.get("class_names", [])
+    if 0 <= idx < len(class_names):
+        class_names.pop(idx)
+        settings["class_names"] = class_names
         save_settings(settings)
     return redirect(url_for("index"))
 

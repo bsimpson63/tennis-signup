@@ -40,9 +40,8 @@ if _settings_path.exists():
     except Exception:
         pass
 
-# Schedule: list of {"class_name": str, "day": str} dicts — managed via web UI
-# Example: [{"class_name": "Pro On Duty Advanced Monday AM", "day": "monday"}]
-SCHEDULES = _settings.get("schedules", [])
+# Class names to register for — managed via web UI (case-insensitive partial match)
+CLASS_NAMES = _settings.get("class_names", [])
 
 # If True, finds and prints the class but does NOT register
 DRY_RUN = _settings.get("dry_run", False)

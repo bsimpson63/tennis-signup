@@ -197,11 +197,11 @@ def submit_payment(driver, cart_item_id, turnstile_token):
 
 
 def find_and_register(driver):
-    if not config.SCHEDULES:
+    if not config.CLASS_NAMES:
         log("No classes configured. Add classes via the web UI.")
         return False
 
-    log("Searching for: " + ", ".join(s["class_name"] for s in config.SCHEDULES))
+    log("Searching for: " + ", ".join(config.CLASS_NAMES))
 
     try:
         WebDriverWait(driver, config.TIMEOUT).until(
@@ -221,17 +221,17 @@ def find_and_register(driver):
     for block in open_blocks:
         container_text = block.text.strip()
 
-        matched_schedule = next(
-            (s for s in config.SCHEDULES if s["class_name"].lower() in container_text.lower()),
+        matched_name = next(
+            (name for name in config.CLASS_NAMES if name.lower() in container_text.lower()),
             None
         )
-        if not matched_schedule:
+        if not matched_name:
             continue
 
         title = ""
         for line in container_text.splitlines():
             line = line.strip()
-            if matched_schedule["class_name"].lower() in line.lower():
+            if matched_name.lower() in line.lower():
                 title = line
                 break
 
