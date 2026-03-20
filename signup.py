@@ -218,70 +218,70 @@ def find_and_register(driver):
     ]
     log(f"Found {len(open_blocks)} class(es) with open registration.")
 
+    # Collect all matching blocks, then take the last one (furthest out = newly available)
+    matches = []
     for block in open_blocks:
         container_text = block.text.strip()
-
         matched_name = next(
             (name for name in config.CLASS_NAMES if name.lower() in container_text.lower()),
             None
         )
         if not matched_name:
             continue
-
         title = ""
         for line in container_text.splitlines():
             line = line.strip()
             if matched_name.lower() in line.lower():
                 title = line
                 break
-
         btn = block.find_element(By.CSS_SELECTOR, ".register_button:not(.register-button-closed)")
-        btn_label = btn.text.strip() or "Sign Up"
-
-        if "in cart" in btn_label.lower():
+        if "in cart" in (btn.text.strip() or "").lower():
             log(f"  Skipping '{title}' — already in cart. Clear your cart at /member/cart first.")
             continue
+        matches.append((block, btn, title))
 
-        log(f"  Found open class: '{title}'")
+    if not matches:
+        log("No open classes found today.")
+        return False
 
-        if config.DRY_RUN:
-            log("  DRY RUN: Would register. Disable dry run via the web UI to sign up.")
-            return True
+    block, btn, title = matches[-1]
+    log(f"  Found open class: '{title}' ({len(matches)} match(es) total, registering for the last)")
 
-        # Step 1: add to cart via popup
-        driver.execute_script("arguments[0].scrollIntoView()", btn)
-        driver.execute_script("arguments[0].click()", btn)
-        if not add_to_cart(driver, title):
-            continue
-
-        # Step 2: get cart item ID
-        cart_item_id = get_cart_item_id(driver)
-        if not cart_item_id:
-            continue
-
-        # Step 3: solve Turnstile
-        turnstile_token = solve_turnstile()
-        if not turnstile_token:
-            log("  Failed to get Turnstile token from CapSolver.")
-            return False
-
-        if config.CAPTCHA_TEST_ONLY:
-            log("  CAPTCHA_TEST_ONLY: Turnstile solved successfully. Skipping payment submission.")
-            log("  Clear your cart at /member/cart before running again.")
-            return True
-
-        # Step 4: submit payment directly via requests
-        response = submit_payment(driver, cart_item_id, turnstile_token)
-
-        if response.status_code == 200:
-            log(f"Successfully registered for '{title}'!")
-        else:
-            log(f"Payment submission returned status {response.status_code}. Check your account.")
-
+    if config.DRY_RUN:
+        log("  DRY RUN: Would register. Disable dry run via the web UI to sign up.")
         return True
 
-    log("No open classes found today.")
-    return False
+    # Step 1: add to cart via popup
+    driver.execute_script("arguments[0].scrollIntoView()", btn)
+    driver.execute_script("arguments[0].click()", btn)
+    if not add_to_cart(driver, title):
+        return False
+
+    # Step 2: get cart item ID
+    cart_item_id = get_cart_item_id(driver)
+    if not cart_item_id:
+        return False
+
+    # Step 3: solve Turnstile
+    turnstile_token = solve_turnstile()
+    if not turnstile_token:
+        log("  Failed to get Turnstile token from CapSolver.")
+        return False
+
+    if config.CAPTCHA_TEST_ONLY:
+        log("  CAPTCHA_TEST_ONLY: Turnstile solved successfully. Skipping payment submission.")
+        log("  Clear your cart at /member/cart before running again.")
+        return True
+
+    # Step 4: submit payment directly via requests
+    response = submit_payment(driver, cart_item_id, turnstile_token)
+
+    if response.status_code == 200:
+        log(f"Successfully registered for '{title}'!")
+    else:
+        log(f"Payment submission returned status {response.status_code}. Check your account.")
+
+    return True
 
 
 def main():
