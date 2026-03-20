@@ -26,14 +26,14 @@ Edit `.env` and fill in all required values:
 Start the web UI and add classes via the browser (see below), or manually create `settings.json`:
 ```json
 {
-  "schedules": [
-    {"class_name": "Pro On Duty Advanced Monday AM", "day": "monday"},
-    {"class_name": "Stroke of the Week Wednesday AM", "day": "wednesday"}
+  "class_names": [
+    "Pro On Duty Advanced Monday AM",
+    "Stroke of the Week Wednesday AM"
   ],
   "dry_run": false
 }
 ```
-Class names are case-insensitive partial matches against what appears on the [class calendar](https://wac.clubautomation.com/calendar/classes?tab=by-date).
+Class names are case-insensitive partial matches against what appears on the [class calendar](https://wac.clubautomation.com/calendar/classes?tab=by-date). Include the day in the name (e.g. "Monday AM") to avoid matching classes on the wrong day.
 
 **4. Test it**
 ```bash
@@ -43,34 +43,26 @@ python3 signup.py
 ## How it works
 
 1. Runs nightly at 12:01 AM
-2. Checks today's day of week against the configured schedule
-3. Logs in via Selenium (Chromium, headless) and navigates to the by-date calendar view
-4. Finds the first open class matching today's scheduled class name
-5. Clicks Sign Up, selects the member, and adds to cart
-6. Calls CapSolver to solve the Cloudflare Turnstile challenge on the cart page
-7. POSTs directly to the payment API using the session cookies + Turnstile token
+2. Logs in via Selenium (Chromium, headless) and navigates to the by-date calendar view
+3. Finds the first open class whose name matches any configured class name
+4. Clicks Sign Up, selects the member, and adds to cart
+5. Calls CapSolver to solve the Cloudflare Turnstile challenge on the cart page
+6. POSTs directly to the payment API using the session cookies + Turnstile token
 
 ## Web UI
 
-A Flask web app lets you manage the schedule and view logs from any browser on your local network.
+A Flask web app lets you manage the class list and view logs from any browser on your local network.
 
-**Start manually:**
-```bash
-python3 webapp.py
-```
-
-**Access at:** `http://raspberrypi.local:5000` (or the Pi's IP address)
+**Access at:** `http://raspberrypi.local:5000`
 
 The web UI lets you:
-- Add and remove (class name, day) schedule entries
+- Add and remove class names
 - Toggle dry run mode
 - View recent log output
 
-The web app starts automatically on boot via cron (`@reboot`).
+## Running automatically on Raspberry Pi
 
-## Running automatically
-
-### Raspberry Pi (recommended) — cron
+### Signup script — cron
 
 ```bash
 crontab -e
@@ -78,7 +70,29 @@ crontab -e
 Add:
 ```
 1 0 * * * cd /home/pi/tennis-signup && /home/pi/tennis-signup/venv/bin/python3 signup.py >> /home/pi/tennis-signup/signup.log 2>&1
-@reboot cd /home/pi/tennis-signup && /home/pi/tennis-signup/venv/bin/python3 webapp.py >> /home/pi/tennis-signup/webapp.log 2>&1
+```
+
+### Web UI — systemd
+
+The web app runs as a systemd service so it starts on boot and restarts automatically if it crashes.
+
+**Install:**
+```bash
+sudo cp tennis-webapp.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable tennis-webapp
+sudo systemctl start tennis-webapp
+```
+
+**Status / logs:**
+```bash
+sudo systemctl status tennis-webapp
+sudo journalctl -u tennis-webapp -f
+```
+
+**Restart:**
+```bash
+sudo systemctl restart tennis-webapp
 ```
 
 ### macOS — launchd

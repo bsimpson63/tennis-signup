@@ -1,0 +1,14 @@
+[Unit]
+Description=Tennis Signup Web UI
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/tennis-signup
+ExecStart=/home/pi/tennis-signup/venv/bin/python3 webapp.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
