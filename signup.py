@@ -7,7 +7,7 @@ Checkout is completed via direct API call with a CapSolver-generated Turnstile t
 
 import sys
 import re  # used in get_cart_item_id
-import datetime
+import datetime  # used in main() for timestamp
 import time
 import requests
 import capsolver
@@ -197,15 +197,11 @@ def submit_payment(driver, cart_item_id, turnstile_token):
 
 
 def find_and_register(driver):
-    today = datetime.datetime.now().strftime("%A").lower()  # e.g. "monday"
-    today_schedules = [s for s in config.SCHEDULES if s.get("day") == today]
-
-    if not today_schedules:
-        log(f"No classes scheduled for {today.capitalize()}.")
+    if not config.SCHEDULES:
+        log("No classes configured. Add classes via the web UI.")
         return False
 
-    log(f"Searching for classes on {today.capitalize()}: "
-        + ", ".join(s["class_name"] for s in today_schedules))
+    log("Searching for: " + ", ".join(s["class_name"] for s in config.SCHEDULES))
 
     try:
         WebDriverWait(driver, config.TIMEOUT).until(
@@ -226,7 +222,7 @@ def find_and_register(driver):
         container_text = block.text.strip()
 
         matched_schedule = next(
-            (s for s in today_schedules if s["class_name"].lower() in container_text.lower()),
+            (s for s in config.SCHEDULES if s["class_name"].lower() in container_text.lower()),
             None
         )
         if not matched_schedule:
@@ -284,7 +280,7 @@ def find_and_register(driver):
 
         return True
 
-    log(f"No open classes found for {today.capitalize()}.")
+    log("No open classes found today.")
     return False
 
 
