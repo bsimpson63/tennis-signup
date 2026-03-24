@@ -141,21 +141,27 @@ def get_cart_item_id(driver):
     return None
 
 
-def solve_turnstile():
+def solve_turnstile(retries=3):
     """Use CapSolver to solve the Cloudflare Turnstile challenge."""
-    log("  Solving Cloudflare Turnstile via CapSolver...")
     capsolver.api_key = config.CAPSOLVER_API_KEY
-    solution = capsolver.solve({
-        "type": "AntiTurnstileTaskProxyLess",
-        "websiteURL": config.CF_TURNSTILE_URL,
-        "websiteKey": config.CF_TURNSTILE_SITE_KEY,
-    })
-    token = solution.get("token")
-    if token:
-        log("  Turnstile solved.")
-    else:
-        log(f"  CapSolver returned unexpected response: {solution}")
-    return token
+    for attempt in range(1, retries + 1):
+        try:
+            log(f"  Solving Cloudflare Turnstile via CapSolver (attempt {attempt}/{retries})...")
+            solution = capsolver.solve({
+                "type": "AntiTurnstileTaskProxyLess",
+                "websiteURL": config.CF_TURNSTILE_URL,
+                "websiteKey": config.CF_TURNSTILE_SITE_KEY,
+            })
+            token = solution.get("token")
+            if token:
+                log("  Turnstile solved.")
+                return token
+            log(f"  CapSolver returned unexpected response: {solution}")
+        except Exception as e:
+            log(f"  CapSolver attempt {attempt} failed: {e}")
+            if attempt < retries:
+                time.sleep(5)
+    return None
 
 
 def submit_payment(driver, cart_item_id, turnstile_token):
