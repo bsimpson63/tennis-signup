@@ -76,7 +76,7 @@ def load_by_date_view(driver):
             EC.visibility_of_element_located((By.CSS_SELECTOR,
                 "#byDateTab, [data-tab='by-date'], a[href*='by-date']"))
         )
-        tab.click()
+        driver.execute_script("arguments[0].click()", tab)
         wait_for_page_load(driver)
         time.sleep(1)
         log(f"Switched to By Date view. URL: {driver.current_url}")
@@ -202,6 +202,69 @@ def submit_payment(driver, cart_item_id, turnstile_token):
     return response
 
 
+def parse_date_from_text(text):
+    """Try to extract a date from a text string. Returns datetime.date or None."""
+    month_names = {
+        'january': 1, 'february': 2, 'march': 3, 'april': 4,
+        'may': 5, 'june': 6, 'july': 7, 'august': 8,
+        'september': 9, 'october': 10, 'november': 11, 'december': 12,
+    }
+    today = datetime.date.today()
+
+    # Try "March 30, 2026" or "Monday, March 30, 2026" (with explicit year)
+    m = re.search(r'\b([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})\b', text)
+    if m:
+        month = month_names.get(m.group(1).lower())
+        if month:
+            try:
+                return datetime.date(int(m.group(3)), month, int(m.group(2)))
+            except ValueError:
+                pass
+
+    # Try "March 30" or "Monday, March 30" (no year — pick nearest future occurrence)
+    m = re.search(r'\b([A-Za-z]+)\s+(\d{1,2})\b', text)
+    if m:
+        month = month_names.get(m.group(1).lower())
+        if month:
+            for year in [today.year, today.year + 1]:
+                try:
+                    d = datetime.date(year, month, int(m.group(2)))
+                    if d >= today:
+                        return d
+                except ValueError:
+                    pass
+
+    return None
+
+
+def get_block_date(driver, block):
+    """Find the date for a class block by checking its text and preceding DOM headings."""
+    d = parse_date_from_text(block.text)
+    if d:
+        return d
+
+    heading_text = driver.execute_script("""
+        const block = arguments[0];
+        function findDateHeading(el) {
+            let sib = el.previousElementSibling;
+            while (sib) {
+                const t = sib.textContent.trim();
+                if (t.length < 80 && /[A-Za-z]+ \\d{1,2}/.test(t)) return t;
+                sib = sib.previousElementSibling;
+            }
+            return null;
+        }
+        let result = findDateHeading(block);
+        if (!result && block.parentElement) result = findDateHeading(block.parentElement);
+        return result;
+    """, block)
+
+    if heading_text:
+        return parse_date_from_text(heading_text)
+
+    return None
+
+
 def find_and_register(driver):
     if not config.CLASS_NAMES:
         log("No classes configured. Add classes via the web UI.")
@@ -244,6 +307,16 @@ def find_and_register(driver):
         if "in cart" in (btn.text.strip() or "").lower():
             log(f"  Skipping '{title}' — already in cart. Clear your cart at /member/cart first.")
             continue
+        class_date = get_block_date(driver, block)
+        today = datetime.date.today()
+        if class_date is None:
+            log(f"  Skipping '{title}' — could not determine class date.")
+            continue
+        days_out = (class_date - today).days
+        if days_out < 7:
+            log(f"  Skipping '{title}' — {days_out} day(s) away (need exactly 7).")
+            continue
+        log(f"  '{title}' is {days_out} day(s) away ({class_date}).")
         matches.append((block, btn, title))
 
     if not matches:
