@@ -7,12 +7,24 @@ Access at: http://<host>:5000
 
 import json
 import pathlib
+import subprocess
 from flask import Flask, request, redirect, url_for, render_template_string
 
 app = Flask(__name__)
 
 SETTINGS_PATH = pathlib.Path(__file__).parent / "settings.json"
 LOG_PATH = pathlib.Path(__file__).parent / "signup.log"
+
+
+def git_hash():
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=pathlib.Path(__file__).parent,
+            stderr=subprocess.DEVNULL,
+        ).decode().strip()
+    except Exception:
+        return "unknown"
 
 
 def load_settings():
@@ -110,6 +122,9 @@ TEMPLATE = """<!doctype html>
       <pre>{{ log }}</pre>
     </section>
   </main>
+  <footer style="text-align:center; padding: 1rem; font-size: 0.75rem; color: var(--pico-muted-color);">
+    version {{ git_hash }}
+  </footer>
 </body>
 </html>"""
 
@@ -123,6 +138,7 @@ def index():
         dry_run=settings.get("dry_run", False),
         log=read_log(),
         enumerate=enumerate,
+        git_hash=git_hash(),
     )
 
 
