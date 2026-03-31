@@ -313,8 +313,8 @@ def find_and_register(driver):
             log(f"  Skipping '{title}' — could not determine class date.")
             continue
         days_out = (class_date - today).days
-        if days_out < 7:
-            log(f"  Skipping '{title}' — {days_out} day(s) away (need exactly 7).")
+        if days_out < 6:
+            log(f"  Skipping '{title}' — {days_out} day(s) away (need at least 6).")
             continue
         log(f"  '{title}' is {days_out} day(s) away ({class_date}).")
         matches.append((block, btn, title))
