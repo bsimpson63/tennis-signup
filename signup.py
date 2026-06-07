@@ -355,12 +355,17 @@ def find_and_register(driver):
     # Step 4: submit payment directly via requests
     response = submit_payment(driver, cart_item_id, turnstile_token)
 
-    if response.status_code == 200:
+    if response.status_code == 200 and "error-field" not in response.text:
         log(f"Successfully registered for '{title}'!")
+        return True
+    elif response.status_code == 200:
+        match = re.search(r'class="error-field[^"]*">\s*(.*?)\s*<br', response.text, re.DOTALL)
+        error_msg = match.group(1).strip() if match else "Unknown error (check response body above)"
+        log(f"  Registration failed: {error_msg}")
+        return False
     else:
         log(f"Payment submission returned status {response.status_code}. Check your account.")
-
-    return True
+        return False
 
 
 def main():
